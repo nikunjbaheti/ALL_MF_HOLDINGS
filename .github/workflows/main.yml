@@ -1,0 +1,64 @@
+name: Run Python Scripts and Commit CSV Files
+
+on:
+  workflow_dispatch:  # Trigger manually
+ # schedule:
+ #   - cron: '0 0 * * *'  # Run every day at midnight
+
+jobs:
+  build:
+    name: Mutual Fund Holdings
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'  # Specify Python version
+
+      - name: Check for existing CSV files
+        run: |
+          echo "Checking for existing CSV files..."
+          if [ -n "$(find . -maxdepth 1 -name '*.csv' -print -quit)" ]; then
+            echo "Found CSV files. Deleting..."
+            find . -type f -name "*.csv" -delete
+          else
+            echo "No CSV files found."
+            exit 0  # Skip next steps if no files
+          fi
+        id: check_csv
+
+      - name: Commit CSV deletion
+        if: steps.check_csv.outcome == 'success'
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add .
+          git commit -m "Remove old CSV files" || true  # Continue if no changes
+          git push
+
+      - name: Install dependencies in virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Python scripts
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          source venv/bin/activate
+          python MFCode.py
+          python "All Holdings and Mapping.py"
+          
+      - name: Commit new CSV files
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add *.csv
+          git commit -m "Commit updated CSV files" || true
+          git push
